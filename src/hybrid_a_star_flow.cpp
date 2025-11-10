@@ -28,12 +28,12 @@
 #include "hybrid_a_star/hybrid_a_star_flow.h"
 
 #include <nav_msgs/Path.h>
+#include <tf/transform_broadcaster.h>
+#include <tf/transform_datatypes.h>
 #include <visualization_msgs/Marker.h>
 #include <visualization_msgs/MarkerArray.h>
-#include <tf/transform_datatypes.h>
-#include <tf/transform_broadcaster.h>
 
-__attribute__((unused)) double Mod2Pi(const double &x) {
+__attribute__((unused)) double Mod2Pi(const double& x) {
     double v = fmod(x, 2 * M_PI);
 
     if (v < -M_PI) {
@@ -45,7 +45,7 @@ __attribute__((unused)) double Mod2Pi(const double &x) {
     return v;
 }
 
-HybridAStarFlow::HybridAStarFlow(ros::NodeHandle &nh) {
+HybridAStarFlow::HybridAStarFlow(ros::NodeHandle& nh) {
     double steering_angle = nh.param("planner/steering_angle", 10);
     int steering_angle_discrete_num = nh.param("planner/steering_angle_discrete_num", 1);
     double wheel_base = nh.param("planner/wheel_base", 1.0);
@@ -57,9 +57,8 @@ HybridAStarFlow::HybridAStarFlow(ros::NodeHandle &nh) {
     double shot_distance = nh.param("planner/shot_distance", 5.0);
 
     kinodynamic_astar_searcher_ptr_ = std::make_shared<HybridAStar>(
-            steering_angle, steering_angle_discrete_num, segment_length, segment_length_discrete_num, wheel_base,
-            steering_penalty, reversing_penalty, steering_change_penalty, shot_distance
-    );
+        steering_angle, steering_angle_discrete_num, segment_length, segment_length_discrete_num, wheel_base,
+        steering_penalty, reversing_penalty, steering_change_penalty, shot_distance);
     costmap_sub_ptr_ = std::make_shared<CostMapSubscriber>(nh, "/map", 1);
     init_pose_sub_ptr_ = std::make_shared<InitPoseSubscriber2D>(nh, "/initialpose", 1);
     goal_pose_sub_ptr_ = std::make_shared<GoalPoseSubscriber2D>(nh, "/move_base_simple/goal", 1);
@@ -84,12 +83,10 @@ void HybridAStarFlow::Run() {
 
         const double map_resolution = static_cast<float>(current_costmap_ptr_->info.resolution);
         kinodynamic_astar_searcher_ptr_->Init(
-                current_costmap_ptr_->info.origin.position.x,
-                1.0 * current_costmap_ptr_->info.width * current_costmap_ptr_->info.resolution,
-                current_costmap_ptr_->info.origin.position.y,
-                1.0 * current_costmap_ptr_->info.height * current_costmap_ptr_->info.resolution,
-                1.0, map_resolution
-        );
+            current_costmap_ptr_->info.origin.position.x,
+            1.0 * current_costmap_ptr_->info.width * current_costmap_ptr_->info.resolution,
+            current_costmap_ptr_->info.origin.position.y,
+            1.0 * current_costmap_ptr_->info.height * current_costmap_ptr_->info.resolution, 1.0, map_resolution);
 
         unsigned int map_w = std::floor(current_costmap_ptr_->info.width);
         unsigned int map_h = std::floor(current_costmap_ptr_->info.height);
@@ -110,16 +107,10 @@ void HybridAStarFlow::Run() {
         double start_yaw = tf::getYaw(current_init_pose_ptr_->pose.pose.orientation);
         double goal_yaw = tf::getYaw(current_goal_pose_ptr_->pose.orientation);
 
-        Vec3d start_state = Vec3d(
-                current_init_pose_ptr_->pose.pose.position.x,
-                current_init_pose_ptr_->pose.pose.position.y,
-                start_yaw
-        );
-        Vec3d goal_state = Vec3d(
-                current_goal_pose_ptr_->pose.position.x,
-                current_goal_pose_ptr_->pose.position.y,
-                goal_yaw
-        );
+        Vec3d start_state = Vec3d(current_init_pose_ptr_->pose.pose.position.x,
+                                  current_init_pose_ptr_->pose.pose.position.y, start_yaw);
+        Vec3d goal_state =
+            Vec3d(current_goal_pose_ptr_->pose.position.x, current_goal_pose_ptr_->pose.position.y, goal_yaw);
 
         if (kinodynamic_astar_searcher_ptr_->Search(start_state, goal_state)) {
             auto path = kinodynamic_astar_searcher_ptr_->GetPath();
@@ -130,7 +121,7 @@ void HybridAStarFlow::Run() {
             nav_msgs::Path path_ros;
             geometry_msgs::PoseStamped pose_stamped;
 
-            for (const auto &pose: path) {
+            for (const auto& pose : path) {
                 pose_stamped.header.frame_id = "world";
                 pose_stamped.pose.position.x = pose.x();
                 pose_stamped.pose.position.y = pose.y();
@@ -144,7 +135,7 @@ void HybridAStarFlow::Run() {
             path_ros.header.frame_id = "world";
             path_ros.header.stamp = ros::Time::now();
             static tf::TransformBroadcaster transform_broadcaster;
-            for (const auto &pose: path_ros.poses) {
+            for (const auto& pose : path_ros.poses) {
                 tf::Transform transform;
                 transform.setOrigin(tf::Vector3(pose.pose.position.x, pose.pose.position.y, 0.0));
 
@@ -155,17 +146,16 @@ void HybridAStarFlow::Run() {
                 q.setW(pose.pose.orientation.w);
                 transform.setRotation(q);
 
-                transform_broadcaster.sendTransform(tf::StampedTransform(transform,
-                                                                         ros::Time::now(), "world",
-                                                                         "ground_link")
-                );
+                transform_broadcaster.sendTransform(
+                    tf::StampedTransform(transform, ros::Time::now(), "world", "ground_link"));
 
                 ros::Duration(0.05).sleep();
             }
         }
 
         // debug
-//        std::cout << "visited nodes: " << kinodynamic_astar_searcher_ptr_->GetVisitedNodesNumber() << std::endl;
+        //        std::cout << "visited nodes: " << kinodynamic_astar_searcher_ptr_->GetVisitedNodesNumber() <<
+        //        std::endl;
         kinodynamic_astar_searcher_ptr_->Reset();
     }
 }
@@ -192,11 +182,11 @@ bool HybridAStarFlow::HasStartPose() {
     return !init_pose_deque_.empty();
 }
 
-void HybridAStarFlow::PublishPath(const VectorVec3d &path) {
+void HybridAStarFlow::PublishPath(const VectorVec3d& path) {
     nav_msgs::Path nav_path;
 
     geometry_msgs::PoseStamped pose_stamped;
-    for (const auto &pose: path) {
+    for (const auto& pose : path) {
         pose_stamped.header.frame_id = "world";
         pose_stamped.pose.position.x = pose.x();
         pose_stamped.pose.position.y = pose.y();
@@ -212,8 +202,10 @@ void HybridAStarFlow::PublishPath(const VectorVec3d &path) {
     path_pub_.publish(nav_path);
 }
 
-void HybridAStarFlow::PublishVehiclePath(const VectorVec3d &path, double width,
-                                         double length, unsigned int vehicle_interval = 5u) {
+void HybridAStarFlow::PublishVehiclePath(const VectorVec3d& path,
+                                         double width,
+                                         double length,
+                                         unsigned int vehicle_interval = 5u) {
     visualization_msgs::MarkerArray vehicle_array;
 
     for (unsigned int i = 0; i < path.size(); i += vehicle_interval) {
@@ -247,7 +239,7 @@ void HybridAStarFlow::PublishVehiclePath(const VectorVec3d &path, double width,
     vehicle_path_pub_.publish(vehicle_array);
 }
 
-void HybridAStarFlow::PublishSearchedTree(const VectorVec4d &searched_tree) {
+void HybridAStarFlow::PublishSearchedTree(const VectorVec4d& searched_tree) {
     visualization_msgs::Marker tree_list;
     tree_list.header.frame_id = "world";
     tree_list.header.stamp = ros::Time::now();
@@ -267,7 +259,7 @@ void HybridAStarFlow::PublishSearchedTree(const VectorVec4d &searched_tree) {
     tree_list.pose.orientation.z = 0.0;
 
     geometry_msgs::Point point;
-    for (const auto &i: searched_tree) {
+    for (const auto& i : searched_tree) {
         point.x = i.x();
         point.y = i.y();
         point.z = 0.0;

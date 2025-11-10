@@ -32,13 +32,19 @@
 
 #include <iostream>
 
-HybridAStar::HybridAStar(double steering_angle, int steering_angle_discrete_num, double segment_length,
-                         int segment_length_discrete_num, double wheel_base, double steering_penalty,
-                         double reversing_penalty, double steering_change_penalty, double shot_distance,
+HybridAStar::HybridAStar(double steering_angle,
+                         int steering_angle_discrete_num,
+                         double segment_length,
+                         int segment_length_discrete_num,
+                         double wheel_base,
+                         double steering_penalty,
+                         double reversing_penalty,
+                         double steering_change_penalty,
+                         double shot_distance,
                          int grid_size_phi) {
     wheel_base_ = wheel_base;
     segment_length_ = segment_length;
-    steering_radian_ = steering_angle * M_PI / 180.0; // angle to radian
+    steering_radian_ = steering_angle * M_PI / 180.0;  // angle to radian
     steering_discrete_num_ = steering_angle_discrete_num;
     steering_radian_step_size_ = steering_radian_ / steering_discrete_num_;
     move_step_size_ = segment_length / segment_length_discrete_num;
@@ -49,8 +55,8 @@ HybridAStar::HybridAStar(double steering_angle, int steering_angle_discrete_num,
     shot_distance_ = shot_distance;
 
     CHECK_EQ(static_cast<float>(segment_length_discrete_num_ * move_step_size_), static_cast<float>(segment_length_))
-        << "The segment length must be divisible by the step size. segment_length: "
-        << segment_length_ << " | step_size: " << move_step_size_;
+        << "The segment length must be divisible by the step size. segment_length: " << segment_length_
+        << " | step_size: " << move_step_size_;
 
     rs_path_ptr_ = std::make_shared<RSPath>(wheel_base_ / std::tan(steering_radian_));
     tie_breaker_ = 1.0 + 1e-3;
@@ -63,8 +69,12 @@ HybridAStar::~HybridAStar() {
     ReleaseMemory();
 }
 
-void HybridAStar::Init(double x_lower, double x_upper, double y_lower, double y_upper,
-                       double state_grid_resolution, double map_grid_resolution) {
+void HybridAStar::Init(double x_lower,
+                       double x_upper,
+                       double y_lower,
+                       double y_upper,
+                       double state_grid_resolution,
+                       double map_grid_resolution) {
     SetVehicleShape(4.7, 2.0, 1.3);
 
     map_x_lower_ = x_lower;
@@ -89,7 +99,6 @@ void HybridAStar::Init(double x_lower, double x_upper, double y_lower, double y_
 
     if (state_node_map_) {
         for (int i = 0; i < STATE_GRID_SIZE_X_; ++i) {
-
             if (state_node_map_[i] == nullptr)
                 continue;
 
@@ -114,9 +123,9 @@ void HybridAStar::Init(double x_lower, double x_upper, double y_lower, double y_
         state_node_map_ = nullptr;
     }
 
-    state_node_map_ = new StateNode::Ptr **[STATE_GRID_SIZE_X_];
+    state_node_map_ = new StateNode::Ptr**[STATE_GRID_SIZE_X_];
     for (int i = 0; i < STATE_GRID_SIZE_X_; ++i) {
-        state_node_map_[i] = new StateNode::Ptr *[STATE_GRID_SIZE_Y_];
+        state_node_map_[i] = new StateNode::Ptr*[STATE_GRID_SIZE_Y_];
         for (int j = 0; j < STATE_GRID_SIZE_Y_; ++j) {
             state_node_map_[i][j] = new StateNode::Ptr[STATE_GRID_SIZE_PHI_];
             for (int k = 0; k < STATE_GRID_SIZE_PHI_; ++k) {
@@ -155,17 +164,13 @@ inline bool HybridAStar::LineCheck(double x0, double y0, double x1, double y1) {
     auto N = static_cast<unsigned int>(x1 - x0);
     for (unsigned int i = 0; i < N; ++i) {
         if (steep) {
-            if (HasObstacle(Vec2i(yk, x0 + i * 1.0))
-                || BeyondBoundary(Vec2d(yk * MAP_GRID_RESOLUTION_,
-                                        (x0 + i) * MAP_GRID_RESOLUTION_))
-                    ) {
+            if (HasObstacle(Vec2i(yk, x0 + i * 1.0)) ||
+                BeyondBoundary(Vec2d(yk * MAP_GRID_RESOLUTION_, (x0 + i) * MAP_GRID_RESOLUTION_))) {
                 return false;
             }
         } else {
-            if (HasObstacle(Vec2i(x0 + i * 1.0, yk))
-                || BeyondBoundary(Vec2d((x0 + i) * MAP_GRID_RESOLUTION_,
-                                        yk * MAP_GRID_RESOLUTION_))
-                    ) {
+            if (HasObstacle(Vec2i(x0 + i * 1.0, yk)) ||
+                BeyondBoundary(Vec2d((x0 + i) * MAP_GRID_RESOLUTION_, yk * MAP_GRID_RESOLUTION_))) {
                 return false;
             }
         }
@@ -180,33 +185,23 @@ inline bool HybridAStar::LineCheck(double x0, double y0, double x1, double y1) {
     return true;
 }
 
-bool HybridAStar::CheckCollision(const double &x, const double &y, const double &theta) {
+bool HybridAStar::CheckCollision(const double& x, const double& y, const double& theta) {
     Timer timer;
     Mat2d R;
-    R << std::cos(theta), -std::sin(theta),
-            std::sin(theta), std::cos(theta);
+    R << std::cos(theta), -std::sin(theta), std::sin(theta), std::cos(theta);
 
     MatXd transformed_vehicle_shape;
     transformed_vehicle_shape.resize(8, 1);
     for (unsigned int i = 0; i < 4u; ++i) {
-        transformed_vehicle_shape.block<2, 1>(i * 2, 0)
-                = R * vehicle_shape_.block<2, 1>(i * 2, 0) + Vec2d(x, y);
+        transformed_vehicle_shape.block<2, 1>(i * 2, 0) = R * vehicle_shape_.block<2, 1>(i * 2, 0) + Vec2d(x, y);
     }
 
-    Vec2i transformed_pt_index_0 = Coordinate2MapGridIndex(
-            transformed_vehicle_shape.block<2, 1>(0, 0)
-    );
-    Vec2i transformed_pt_index_1 = Coordinate2MapGridIndex(
-            transformed_vehicle_shape.block<2, 1>(2, 0)
-    );
+    Vec2i transformed_pt_index_0 = Coordinate2MapGridIndex(transformed_vehicle_shape.block<2, 1>(0, 0));
+    Vec2i transformed_pt_index_1 = Coordinate2MapGridIndex(transformed_vehicle_shape.block<2, 1>(2, 0));
 
-    Vec2i transformed_pt_index_2 = Coordinate2MapGridIndex(
-            transformed_vehicle_shape.block<2, 1>(4, 0)
-    );
+    Vec2i transformed_pt_index_2 = Coordinate2MapGridIndex(transformed_vehicle_shape.block<2, 1>(4, 0));
 
-    Vec2i transformed_pt_index_3 = Coordinate2MapGridIndex(
-            transformed_vehicle_shape.block<2, 1>(6, 0)
-    );
+    Vec2i transformed_pt_index_3 = Coordinate2MapGridIndex(transformed_vehicle_shape.block<2, 1>(6, 0));
 
     double y1, y0, x1, x0;
     // pt1 -> pt0
@@ -255,23 +250,20 @@ bool HybridAStar::CheckCollision(const double &x, const double &y, const double 
 }
 
 bool HybridAStar::HasObstacle(const int grid_index_x, const int grid_index_y) const {
-    return (grid_index_x >= 0 && grid_index_x < MAP_GRID_SIZE_X_
-            && grid_index_y >= 0 && grid_index_y < MAP_GRID_SIZE_Y_
-            && (map_data_[grid_index_y * MAP_GRID_SIZE_X_ + grid_index_x] == 1));
+    return (grid_index_x >= 0 && grid_index_x < MAP_GRID_SIZE_X_ && grid_index_y >= 0 &&
+            grid_index_y < MAP_GRID_SIZE_Y_ && (map_data_[grid_index_y * MAP_GRID_SIZE_X_ + grid_index_x] == 1));
 }
 
-bool HybridAStar::HasObstacle(const Vec2i &grid_index) const {
+bool HybridAStar::HasObstacle(const Vec2i& grid_index) const {
     int grid_index_x = grid_index[0];
     int grid_index_y = grid_index[1];
 
-    return (grid_index_x >= 0 && grid_index_x < MAP_GRID_SIZE_X_
-            && grid_index_y >= 0 && grid_index_y < MAP_GRID_SIZE_Y_
-            && (map_data_[grid_index_y * MAP_GRID_SIZE_X_ + grid_index_x] == 1));
+    return (grid_index_x >= 0 && grid_index_x < MAP_GRID_SIZE_X_ && grid_index_y >= 0 &&
+            grid_index_y < MAP_GRID_SIZE_Y_ && (map_data_[grid_index_y * MAP_GRID_SIZE_X_ + grid_index_x] == 1));
 }
 
 void HybridAStar::SetObstacle(unsigned int x, unsigned int y) {
-    if (x > static_cast<unsigned int>(MAP_GRID_SIZE_X_)
-        || y > static_cast<unsigned int>(MAP_GRID_SIZE_Y_)) {
+    if (x > static_cast<unsigned int>(MAP_GRID_SIZE_X_) || y > static_cast<unsigned int>(MAP_GRID_SIZE_Y_)) {
         return;
     }
 
@@ -279,8 +271,7 @@ void HybridAStar::SetObstacle(unsigned int x, unsigned int y) {
 }
 
 void HybridAStar::SetObstacle(const double pt_x, const double pt_y) {
-    if (pt_x < map_x_lower_ || pt_x > map_x_upper_ ||
-        pt_y < map_y_lower_ || pt_y > map_y_upper_) {
+    if (pt_x < map_x_lower_ || pt_x > map_x_upper_ || pt_y < map_y_lower_ || pt_y > map_y_upper_) {
         return;
     }
 
@@ -299,41 +290,39 @@ void HybridAStar::SetVehicleShape(double length, double width, double rear_axle_
 
     const double step_size = move_step_size_;
     const auto N_length = static_cast<unsigned int>(length / step_size);
-    const auto N_width = static_cast<unsigned int> (width / step_size);
+    const auto N_width = static_cast<unsigned int>(width / step_size);
     vehicle_shape_discrete_.resize(2, (N_length + N_width) * 2u);
 
-    const Vec2d edge_0_normalized = (vehicle_shape_.block<2, 1>(2, 0)
-                                     - vehicle_shape_.block<2, 1>(0, 0)).normalized();
+    const Vec2d edge_0_normalized = (vehicle_shape_.block<2, 1>(2, 0) - vehicle_shape_.block<2, 1>(0, 0)).normalized();
     for (unsigned int i = 0; i < N_length; ++i) {
-        vehicle_shape_discrete_.block<2, 1>(0, i + N_length)
-                = vehicle_shape_.block<2, 1>(4, 0) - edge_0_normalized * i * step_size;
-        vehicle_shape_discrete_.block<2, 1>(0, i)
-                = vehicle_shape_.block<2, 1>(0, 0) + edge_0_normalized * i * step_size;
+        vehicle_shape_discrete_.block<2, 1>(0, i + N_length) =
+            vehicle_shape_.block<2, 1>(4, 0) - edge_0_normalized * i * step_size;
+        vehicle_shape_discrete_.block<2, 1>(0, i) =
+            vehicle_shape_.block<2, 1>(0, 0) + edge_0_normalized * i * step_size;
     }
 
-    const Vec2d edge_1_normalized = (vehicle_shape_.block<2, 1>(4, 0)
-                                     - vehicle_shape_.block<2, 1>(2, 0)).normalized();
+    const Vec2d edge_1_normalized = (vehicle_shape_.block<2, 1>(4, 0) - vehicle_shape_.block<2, 1>(2, 0)).normalized();
     for (unsigned int i = 0; i < N_width; ++i) {
-        vehicle_shape_discrete_.block<2, 1>(0, (2 * N_length) + i)
-                = vehicle_shape_.block<2, 1>(2, 0) + edge_1_normalized * i * step_size;
-        vehicle_shape_discrete_.block<2, 1>(0, (2 * N_length) + i + N_width)
-                = vehicle_shape_.block<2, 1>(6, 0) - edge_1_normalized * i * step_size;
+        vehicle_shape_discrete_.block<2, 1>(0, (2 * N_length) + i) =
+            vehicle_shape_.block<2, 1>(2, 0) + edge_1_normalized * i * step_size;
+        vehicle_shape_discrete_.block<2, 1>(0, (2 * N_length) + i + N_width) =
+            vehicle_shape_.block<2, 1>(6, 0) - edge_1_normalized * i * step_size;
     }
 }
 
-__attribute__((unused)) Vec2d HybridAStar::CoordinateRounding(const Vec2d &pt) const {
+__attribute__((unused)) Vec2d HybridAStar::CoordinateRounding(const Vec2d& pt) const {
     return MapGridIndex2Coordinate(Coordinate2MapGridIndex(pt));
 }
 
-Vec2d HybridAStar::MapGridIndex2Coordinate(const Vec2i &grid_index) const {
+Vec2d HybridAStar::MapGridIndex2Coordinate(const Vec2i& grid_index) const {
     Vec2d pt;
-    pt.x() = ((double) grid_index[0] + 0.5) * MAP_GRID_RESOLUTION_ + map_x_lower_;
-    pt.y() = ((double) grid_index[1] + 0.5) * MAP_GRID_RESOLUTION_ + map_y_lower_;
+    pt.x() = ((double)grid_index[0] + 0.5) * MAP_GRID_RESOLUTION_ + map_x_lower_;
+    pt.y() = ((double)grid_index[1] + 0.5) * MAP_GRID_RESOLUTION_ + map_y_lower_;
 
     return pt;
 }
 
-Vec3i HybridAStar::State2Index(const Vec3d &state) const {
+Vec3i HybridAStar::State2Index(const Vec3d& state) const {
     Vec3i index;
 
     index[0] = std::min(std::max(int((state[0] - map_x_lower_) / STATE_GRID_RESOLUTION_), 0), STATE_GRID_SIZE_X_ - 1);
@@ -343,7 +332,7 @@ Vec3i HybridAStar::State2Index(const Vec3d &state) const {
     return index;
 }
 
-Vec2i HybridAStar::Coordinate2MapGridIndex(const Vec2d &pt) const {
+Vec2i HybridAStar::Coordinate2MapGridIndex(const Vec2d& pt) const {
     Vec2i grid_index;
 
     grid_index[0] = int((pt[0] - map_x_lower_) / MAP_GRID_RESOLUTION_);
@@ -351,8 +340,7 @@ Vec2i HybridAStar::Coordinate2MapGridIndex(const Vec2d &pt) const {
     return grid_index;
 }
 
-void HybridAStar::GetNeighborNodes(const StateNode::Ptr &curr_node_ptr,
-                                   std::vector<StateNode::Ptr> &neighbor_nodes) {
+void HybridAStar::GetNeighborNodes(const StateNode::Ptr& curr_node_ptr, std::vector<StateNode::Ptr>& neighbor_nodes) {
     neighbor_nodes.clear();
 
     for (int i = -steering_discrete_num_; i <= steering_discrete_num_; ++i) {
@@ -414,14 +402,13 @@ void HybridAStar::GetNeighborNodes(const StateNode::Ptr &curr_node_ptr,
     }
 }
 
-void HybridAStar::DynamicModel(const double &step_size, const double &phi,
-                               double &x, double &y, double &theta) const {
+void HybridAStar::DynamicModel(const double& step_size, const double& phi, double& x, double& y, double& theta) const {
     x = x + step_size * std::cos(theta);
     y = y + step_size * std::sin(theta);
     theta = Mod2Pi(theta + step_size / wheel_base_ * std::tan(phi));
 }
 
-double HybridAStar::Mod2Pi(const double &x) {
+double HybridAStar::Mod2Pi(const double& x) {
     double v = fmod(x, 2 * M_PI);
 
     if (v < -M_PI) {
@@ -433,31 +420,28 @@ double HybridAStar::Mod2Pi(const double &x) {
     return v;
 }
 
-bool HybridAStar::BeyondBoundary(const Vec2d &pt) const {
+bool HybridAStar::BeyondBoundary(const Vec2d& pt) const {
     return pt.x() < map_x_lower_ || pt.x() > map_x_upper_ || pt.y() < map_y_lower_ || pt.y() > map_y_upper_;
 }
 
-double HybridAStar::ComputeH(const StateNode::Ptr &current_node_ptr,
-                             const StateNode::Ptr &terminal_node_ptr) {
+double HybridAStar::ComputeH(const StateNode::Ptr& current_node_ptr, const StateNode::Ptr& terminal_node_ptr) {
     double h;
     // L2
-//    h = (current_node_ptr->state_.head(2) - terminal_node_ptr->state_.head(2)).norm();
+    //    h = (current_node_ptr->state_.head(2) - terminal_node_ptr->state_.head(2)).norm();
 
     // L1
     h = (current_node_ptr->state_.head(2) - terminal_node_ptr->state_.head(2)).lpNorm<1>();
 
     if (h < 3.0 * shot_distance_) {
         h = rs_path_ptr_->Distance(current_node_ptr->state_.x(), current_node_ptr->state_.y(),
-                                   current_node_ptr->state_.z(),
-                                   terminal_node_ptr->state_.x(), terminal_node_ptr->state_.y(),
-                                   terminal_node_ptr->state_.z());
+                                   current_node_ptr->state_.z(), terminal_node_ptr->state_.x(),
+                                   terminal_node_ptr->state_.y(), terminal_node_ptr->state_.z());
     }
 
     return h;
 }
 
-double HybridAStar::ComputeG(const StateNode::Ptr &current_node_ptr,
-                             const StateNode::Ptr &neighbor_node_ptr) const {
+double HybridAStar::ComputeG(const StateNode::Ptr& current_node_ptr, const StateNode::Ptr& neighbor_node_ptr) const {
     double g;
     if (neighbor_node_ptr->direction_ == StateNode::FORWARD) {
         if (neighbor_node_ptr->steering_grade_ != current_node_ptr->steering_grade_) {
@@ -492,7 +476,7 @@ double HybridAStar::ComputeG(const StateNode::Ptr &current_node_ptr,
     return g;
 }
 
-bool HybridAStar::Search(const Vec3d &start_state, const Vec3d &goal_state) {
+bool HybridAStar::Search(const Vec3d& start_state, const Vec3d& goal_state) {
     Timer search_used_time;
 
     double neighbor_time = 0.0, compute_h_time = 0.0, compute_g_time = 0.0;
@@ -545,8 +529,7 @@ bool HybridAStar::Search(const Vec3d &start_state, const Vec3d &goal_state) {
                 std::cout << "ComputeH use time(ms): " << compute_h_time << std::endl;
                 std::cout << "check collision use time(ms): " << check_collision_use_time << std::endl;
                 std::cout << "GetNeighborNodes use time(ms): " << neighbor_time << std::endl;
-                std::cout << "average time of check collision(ms): "
-                          << check_collision_use_time / num_check_collision
+                std::cout << "average time of check collision(ms): " << check_collision_use_time / num_check_collision
                           << std::endl;
                 ROS_INFO("\033[1;32m --> Time in Hybrid A star is %f ms, path length: %f  \033[0m\n",
                          search_used_time.End(), path_length_);
@@ -572,7 +555,7 @@ bool HybridAStar::Search(const Vec3d &start_state, const Vec3d &goal_state) {
             const double current_h = ComputeH(current_node_ptr, goal_node_ptr) * tie_breaker_;
             compute_h_time = compute_h_time + timer_compute_h.End();
 
-            const Vec3i &index = neighbor_node_ptr->grid_index_;
+            const Vec3i& index = neighbor_node_ptr->grid_index_;
             if (state_node_map_[index.x()][index.y()][index.z()] == nullptr) {
                 neighbor_node_ptr->g_cost_ = current_node_ptr->g_cost_ + neighbor_edge_cost;
                 neighbor_node_ptr->parent_node_ = current_node_ptr;
@@ -591,7 +574,7 @@ bool HybridAStar::Search(const Vec3d &start_state, const Vec3d &goal_state) {
                     neighbor_node_ptr->node_status_ = StateNode::IN_OPENSET;
 
                     /// TODO: This will cause a memory leak
-                    //delete state_node_map_[index.x()][index.y()][index.z()];
+                    // delete state_node_map_[index.x()][index.y()][index.z()];
                     state_node_map_[index.x()][index.y()][index.z()] = neighbor_node_ptr;
                 } else {
                     delete neighbor_node_ptr;
@@ -697,9 +680,8 @@ VectorVec3d HybridAStar::GetPath() const {
     }
 
     std::reverse(temp_nodes.begin(), temp_nodes.end());
-    for (const auto &node: temp_nodes) {
-        path.insert(path.end(), node->intermediate_states_.begin(),
-                    node->intermediate_states_.end());
+    for (const auto& node : temp_nodes) {
+        path.insert(path.end(), node->intermediate_states_.begin(), node->intermediate_states_.end());
     }
 
     return path;
@@ -729,13 +711,13 @@ void HybridAStar::Reset() {
     terminal_node_ptr_ = nullptr;
 }
 
-bool HybridAStar::AnalyticExpansions(const StateNode::Ptr &current_node_ptr,
-                                     const StateNode::Ptr &goal_node_ptr, double &length) {
-    VectorVec3d rs_path_poses = rs_path_ptr_->GetRSPath(current_node_ptr->state_,
-                                                        goal_node_ptr->state_,
-                                                        move_step_size_, length);
+bool HybridAStar::AnalyticExpansions(const StateNode::Ptr& current_node_ptr,
+                                     const StateNode::Ptr& goal_node_ptr,
+                                     double& length) {
+    VectorVec3d rs_path_poses =
+        rs_path_ptr_->GetRSPath(current_node_ptr->state_, goal_node_ptr->state_, move_step_size_, length);
 
-    for (const auto &pose: rs_path_poses)
+    for (const auto& pose : rs_path_poses)
         if (BeyondBoundary(pose.head(2)) || !CheckCollision(pose.x(), pose.y(), pose.z())) {
             return false;
         };

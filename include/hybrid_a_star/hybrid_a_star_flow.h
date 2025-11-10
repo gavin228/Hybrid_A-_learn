@@ -28,10 +28,10 @@
 #ifndef HYBRID_A_STAR_HYBRID_A_STAR_FLOW_H
 #define HYBRID_A_STAR_HYBRID_A_STAR_FLOW_H
 
-#include "hybrid_a_star.h"
 #include "costmap_subscriber.h"
-#include "init_pose_subscriber.h"
 #include "goal_pose_subscriber.h"
+#include "hybrid_a_star.h"
+#include "init_pose_subscriber.h"
 
 #include <ros/ros.h>
 
@@ -39,7 +39,7 @@ class HybridAStarFlow {
 public:
     HybridAStarFlow() = default;
 
-    explicit HybridAStarFlow(ros::NodeHandle &nh);
+    explicit HybridAStarFlow(ros::NodeHandle& nh);
 
     void Run();
 
@@ -52,12 +52,11 @@ private:
 
     bool HasGoalPose();
 
-    void PublishPath(const VectorVec3d &path);
+    void PublishPath(const VectorVec3d& path);
 
-    void PublishSearchedTree(const VectorVec4d &searched_tree);
+    void PublishSearchedTree(const VectorVec4d& searched_tree);
 
-    void PublishVehiclePath(const VectorVec3d &path, double width,
-                            double length, unsigned int vehicle_interval);
+    void PublishVehiclePath(const VectorVec3d& path, double width, double length, unsigned int vehicle_interval);
 
 private:
     std::shared_ptr<HybridAStar> kinodynamic_astar_searcher_ptr_;
@@ -82,4 +81,4 @@ private:
     bool has_map_{};
 };
 
-#endif //HYBRID_A_STAR_HYBRID_A_STAR_FLOW_H
+#endif  // HYBRID_A_STAR_HYBRID_A_STAR_FLOW_H
