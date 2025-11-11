@@ -1,0 +1,368 @@
+@startuml Hybrid_A_Star_Class_Diagram
+
+' 设置样式
+skinparam classAttributeIconSize 0
+skinparam classFontSize 11
+skinparam classBackgroundColor LightYellow
+skinparam class {
+    BorderColor Black
+    ArrowColor Black
+}
+
+' 标题
+title Hybrid A* 项目类图\n(包含完整的 UML 关系符号)
+
+' ==================== 核心算法类 ====================
+class HybridAStar {
+    ' 私有属性 - 地图相关
+    - uint8_t* map_data_
+    - double STATE_GRID_RESOLUTION_
+    - double MAP_GRID_RESOLUTION_
+    - double ANGULAR_RESOLUTION_
+    - int STATE_GRID_SIZE_X_
+    - int STATE_GRID_SIZE_Y_
+    - int STATE_GRID_SIZE_PHI_
+    - int MAP_GRID_SIZE_X_
+    - int MAP_GRID_SIZE_Y_
+    - double map_x_lower_
+    - double map_x_upper_
+    - double map_y_lower_
+    - double map_y_upper_
+    
+    ' 私有属性 - 搜索相关
+    - StateNode::Ptr terminal_node_ptr_
+    - StateNode::Ptr*** state_node_map_
+    - std::multimap<double, StateNode::Ptr> openset_
+    
+    ' 私有属性 - 车辆参数
+    - double wheel_base_
+    - double segment_length_
+    - double move_step_size_
+    - double steering_radian_step_size_
+    - double steering_radian_
+    - double tie_breaker_
+    - double shot_distance_
+    - int segment_length_discrete_num_
+    - int steering_discrete_num_
+    - double steering_penalty_
+    - double reversing_penalty_
+    - double steering_change_penalty_
+    
+    ' 私有属性 - 工具
+    - std::shared_ptr<RSPath> rs_path_ptr_
+    - VecXd vehicle_shape_
+    - MatXd vehicle_shape_discrete_
+    
+    ' 公有方法
+    + HybridAStar(steering_angle, steering_discrete_num, ...)
+    + ~HybridAStar()
+    + Init(x_lower, x_upper, y_lower, y_upper, ...)
+    + Search(start_state, goal_state): bool
+    + GetPath(): VectorVec3d
+    + GetSearchedTree(): VectorVec4d
+    + Reset()
+    + SetObstacle(x, y)
+    
+    ' 私有方法 - 搜索算法
+    - GetNeighborNodes(curr_node, neighbors)
+    - AnalyticExpansions(current, goal, rs_length): bool
+    - ComputeG(current, neighbor): double
+    - ComputeH(current, terminal): double
+    - State2Index(state): Vec3i
+    
+    ' 私有方法 - 碰撞检测
+    - CheckCollision(x, y, theta): bool
+    - LineCheck(x0, y0, x1, y1): bool
+    - HasObstacle(grid_index): bool
+    - BeyondBoundary(pt): bool
+    
+    ' 私有方法 - 运动学
+    - DynamicModel(step_size, phi, x, y, theta)
+    - SetVehicleShape(length, width, rear_axle_dist)
+    - Coordinate2MapGridIndex(pt): Vec2i
+    - MapGridIndex2Coordinate(grid_index): Vec2d
+}
+
+' ==================== 状态节点结构体 ====================
+class StateNode <<struct>> {
+    ' 枚举类型
+    + {static} enum NODE_STATUS
+    + {static} enum DIRECTION
+    
+    ' 公有属性
+    + NODE_STATUS node_status_
+    + DIRECTION direction_
+    + Vec3d state_
+    + Vec3i grid_index_
+    + double g_cost_
+    + double f_cost_
+    + int steering_grade_
+    + StateNode* parent_node_
+    + VectorVec3d intermediate_states_
+    
+    ' 类型定义
+    + {static} typedef StateNode* Ptr
+    
+    ' 构造函数
+    + StateNode(grid_index)
+    + Reset()
+}
+
+' StateNode 的枚举
+enum "StateNode::NODE_STATUS" {
+    NOT_VISITED = 0
+    IN_OPENSET = 1
+    IN_CLOSESET = 2
+}
+
+enum "StateNode::DIRECTION" {
+    FORWARD = 0
+    BACKWARD = 1
+    NO = 3
+}
+
+' ==================== 流程控制类 ====================
+class HybridAStarFlow {
+    ' 私有属性 - 算法和订阅者
+    - std::shared_ptr<HybridAStar> kinodynamic_astar_searcher_ptr_
+    - std::shared_ptr<CostMapSubscriber> costmap_sub_ptr_
+    - std::shared_ptr<InitPoseSubscriber2D> init_pose_sub_ptr_
+    - std::shared_ptr<GoalPoseSubscriber2D> goal_pose_sub_ptr_
+    
+    ' 私有属性 - ROS 发布者
+    - ros::Publisher path_pub_
+    - ros::Publisher searched_tree_pub_
+    - ros::Publisher vehicle_path_pub_
+    
+    ' 私有属性 - 数据缓存
+    - std::deque<nav_msgs::OccupancyGridPtr> costmap_deque_
+    - std::deque<geometry_msgs::PoseWithCovarianceStampedPtr> init_pose_deque_
+    - std::deque<geometry_msgs::PoseStampedPtr> goal_pose_deque_
+    - nav_msgs::OccupancyGridPtr current_costmap_ptr_
+    - geometry_msgs::PoseWithCovarianceStampedPtr current_init_pose_ptr_
+    - geometry_msgs::PoseStampedPtr current_goal_pose_ptr_
+    - ros::Time timestamp_
+    - bool has_map_
+    
+    ' 公有方法
+    + HybridAStarFlow(nh)
+    + Run()
+    
+    ' 私有方法
+    - ReadData()
+    - InitPoseData()
+    - HasGoalPose(): bool
+    - HasStartPose(): bool
+    - PublishPath(path)
+    - PublishVehiclePath(path, width, length, interval)
+    - PublishSearchedTree(searched_tree)
+}
+
+' ==================== ROS 订阅者类 ====================
+class CostMapSubscriber {
+    ' 私有属性
+    - ros::Subscriber subscriber_
+    - std::deque<nav_msgs::OccupancyGridPtr> deque_costmap_
+    - std::mutex buff_mutex_
+    
+    ' 公有方法
+    + CostMapSubscriber(nh, topic_name, buff_size)
+    + ParseData(deque_costmap_msg_ptr)
+    
+    ' 私有方法
+    - MessageCallBack(costmap_msg_ptr)
+}
+
+class InitPoseSubscriber2D {
+    ' 私有属性
+    - ros::Subscriber subscriber_
+    - std::deque<geometry_msgs::PoseWithCovarianceStampedPtr> init_poses_
+    - std::mutex buff_mutex_
+    
+    ' 公有方法
+    + InitPoseSubscriber2D(nh, topic_name, buff_size)
+    + ParseData(pose_data_buff)
+    
+    ' 私有方法
+    - MessageCallBack(init_pose_ptr)
+}
+
+class GoalPoseSubscriber2D {
+    ' 私有属性
+    - ros::Subscriber subscriber_
+    - std::deque<geometry_msgs::PoseStampedPtr> goal_poses_
+    - std::mutex buff_mutex_
+    
+    ' 公有方法
+    + GoalPoseSubscriber2D(nh, topic_name, buff_size)
+    + ParseData(pose_data_buff)
+    
+    ' 私有方法
+    - MessageCallBack(goal_pose_ptr)
+}
+
+' ==================== Reeds-Shepp 路径类 ====================
+class RSPath {
+    ' 私有属性
+    - double max_kappa_
+    
+    ' 公有方法
+    + RSPath(max_kappa)
+    + GetRSPath(start_state, goal_state, step_size, path): bool
+    + Distance(sx, sy, sphi, gx, gy, gphi): double
+    
+    ' 私有方法 - RS 曲线类型
+    - SetRSPath(paths, lengths, type, path, step_size)
+    - Mod2Pi(x): double
+    - LSL(x, y, phi, paths, lengths): bool
+    - RSR(x, y, phi, paths, lengths): bool
+    - LSR(x, y, phi, paths, lengths): bool
+    - RSL(x, y, phi, paths, lengths): bool
+    - RLR(x, y, phi, paths, lengths): bool
+    - LRL(x, y, phi, paths, lengths): bool
+    ' ... 其他48种曲线类型
+}
+
+' ==================== 工具类/类型别名 ====================
+note as TypeAliases
+  **类型别名 (type.h)**
+  
+  Vec2d = Eigen::Vector2d
+  Vec3d = Eigen::Vector3d
+  Vec4d = Eigen::Vector4d
+  Vec2i = Eigen::Vector2i
+  Vec3i = Eigen::Vector3i
+  
+  Mat2d = Eigen::Matrix2d
+  Mat3d = Eigen::Matrix3d
+  MatXd = Eigen::MatrixXd
+  VecXd = Eigen::VectorXd
+  
+  VectorVec2d = std::vector<Vec2d>
+  VectorVec3d = std::vector<Vec3d>
+  VectorVec4d = std::vector<Vec4d>
+end note
+
+' ==================== 关系定义 ====================
+
+' 组合关系 (Composition) - 实心菱形
+' 含义：强"拥有"关系，生命周期一致
+HybridAStarFlow *-- "1" HybridAStar : 拥有(创建并管理)
+HybridAStarFlow *-- "1" CostMapSubscriber : 拥有
+HybridAStarFlow *-- "1" InitPoseSubscriber2D : 拥有
+HybridAStarFlow *-- "1" GoalPoseSubscriber2D : 拥有
+HybridAStar *-- "1" RSPath : 拥有
+
+' 聚合关系 (Aggregation) - 空心菱形
+' 含义：弱"拥有"关系，生命周期独立
+HybridAStar o-- "0..*" StateNode : 管理多个\n(通过state_node_map_)
+
+' 依赖关系 (Dependency) - 虚线箭头
+' 含义：临时使用，作为参数或局部变量
+HybridAStar ..> StateNode : <<create>>\n创建节点
+HybridAStarFlow ..> "nav_msgs::OccupancyGrid" : <<use>>
+HybridAStarFlow ..> "geometry_msgs::PoseStamped" : <<use>>
+HybridAStarFlow ..> "geometry_msgs::PoseWithCovarianceStamped" : <<use>>
+
+' 关联关系 (Association) - 实线箭头
+' 含义：长期使用，成员变量
+StateNode --> "0..1" StateNode : parent_node_\n(指向父节点)
+
+' 嵌套关系
+StateNode +-- "StateNode::NODE_STATUS" : 嵌套枚举
+StateNode +-- "StateNode::DIRECTION" : 嵌套枚举
+
+' 使用类型别名
+HybridAStar ..> TypeAliases : <<use>>
+StateNode ..> TypeAliases : <<use>>
+RSPath ..> TypeAliases : <<use>>
+
+' ==================== 图例说明 ====================
+legend right
+  **UML 关系符号说明**
+  
+  |= 符号 |= 名称 |= 含义 |
+  | ◆━━━ | 组合(Composition) | 强拥有，生命周期一致 |
+  | ◇━━━ | 聚合(Aggregation) | 弱拥有，生命周期独立 |
+  | ────> | 关联(Association) | 持有引用/指针 |
+  | ····> | 依赖(Dependency) | 临时使用 |
+  | ━━▷ | 继承(Generalization) | is-a 关系 |
+  | ┈┈▷ | 实现(Realization) | 接口实现 |
+  
+  **多重性标记**
+  1 : 恰好一个
+  0..1 : 零个或一个
+  * 或 0..* : 零个或多个
+  1..* : 一个或多个
+  
+  **访问修饰符**
+  + : public (公有)
+  - : private (私有)
+  # : protected (保护)
+  ~ : package (包级别)
+endlegend
+
+' ==================== 注释说明 ====================
+note top of HybridAStar
+  **核心算法类**
+  
+  职责：
+  • 实现 Hybrid A* 搜索算法
+  • 管理状态空间和搜索树
+  • 执行碰撞检测
+  • 计算启发式代价
+  
+  关键数据结构：
+  • state_node_map_: 3D状态空间
+  • openset_: 优先队列(按f_cost排序)
+end note
+
+note top of StateNode
+  **状态节点数据结构**
+  
+  特点：
+  • 使用 struct (所有成员公有)
+  • 用于存储搜索节点信息
+  • 包含父节点指针用于路径回溯
+  • 保存完整的中间轨迹
+end note
+
+note top of HybridAStarFlow
+  **ROS 节点主控类**
+  
+  职责：
+  • 订阅地图、起点、终点
+  • 调用 HybridAStar 进行规划
+  • 发布路径和可视化信息
+  
+  设计模式：
+  • 外观模式 (Facade Pattern)
+  • 封装了算法调用细节
+end note
+
+note right of CostMapSubscriber
+  **观察者模式**
+  
+  订阅者类的通用结构：
+  1. 订阅 ROS 话题
+  2. 回调函数缓存消息
+  3. 提供 ParseData 接口
+  4. 线程安全 (mutex)
+end note
+
+note bottom of RSPath
+  **Reeds-Shepp 曲线生成器**
+  
+  功能：
+  • 计算非完整约束下的最短路径
+  • 支持48种曲线类型
+  • 用于启发式函数和最终连接
+  
+  曲线类型示例：
+  • LSL: 左转-直行-左转
+  • RSR: 右转-直行-右转
+  • LRL: 左-右-左 (调头)
+end note
+
+@enduml
+
