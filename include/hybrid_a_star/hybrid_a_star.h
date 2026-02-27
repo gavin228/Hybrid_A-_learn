@@ -38,6 +38,7 @@ class HybridAStar {
 public:
     EIGEN_MAKE_ALIGNED_OPERATOR_NEW
 
+    // 删除默认构造，告诉编译器不要生成默认的无参构造函数，要求必须带参构造
     HybridAStar() = delete;
 
     HybridAStar(double steering_angle,
@@ -138,15 +139,27 @@ private:
 
 private:
     uint8_t* map_data_ = nullptr;
+    /**
+     * {}在这里是用来初始化变量的，默认初始化为0.0，也可以{2.0}这样初始化，等价于=2.0
+     * {}初始化是更现代化更安全的编程风格，它的意图明确代码简洁
+     */
     double STATE_GRID_RESOLUTION_{};  // 状态网格的分辨率，用于关注在哪里搜索，分辨率通常较低
     double MAP_GRID_RESOLUTION_{};    // 地图网格的分辨率，用于关注哪里有障碍物，分辨率通常较高
-    double ANGULAR_RESOLUTION_{};     // 角度分辨率
+    double ANGULAR_RESOLUTION_{};     // 角度分辨率，rad
+    // STATE_GRID_SIZE_PHI_ 可能是状态网格在角度维度上的分辨率
     int STATE_GRID_SIZE_X_{}, STATE_GRID_SIZE_Y_{}, STATE_GRID_SIZE_PHI_{};
     int MAP_GRID_SIZE_X_{}, MAP_GRID_SIZE_Y_{};
 
     double map_x_lower_{}, map_x_upper_{}, map_y_lower_{}, map_y_upper_{};
 
     StateNode::Ptr terminal_node_ptr_ = nullptr;
+    /**
+     * state_node_map_ 存放状态节点，用于表征某个节点的状态（是否已经搜索过、父节点是谁、代价是多少等等）
+     * state_node_map_ 是一个存放状态的三维的数组，之所以用数组是因为内存连续，在查找时使用缓存技术查找更快，
+     * 如果改成map的话内存就不连续了，不能使用缓存优化查找速度，相对会慢一些。
+     * 但是，三维数组每一维之间内存是不连续的，并且书写复杂度高，可以将三维映射成一维，保证所有元素内存连续，
+     * 而且书写清晰，手动delete的时候只需要delete[]就可以
+     */
     StateNode::Ptr*** state_node_map_ = nullptr;
 
     std::multimap<double, StateNode::Ptr> openset_;

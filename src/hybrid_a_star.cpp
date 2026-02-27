@@ -288,6 +288,11 @@ void HybridAStar::SetObstacle(const double pt_x, const double pt_y) {
 
 void HybridAStar::SetVehicleShape(double length, double width, double rear_axle_dist) {
     vehicle_shape_.resize(8);
+    /**
+     * 目的是设置车体的四个端点的坐标
+     * vehicle_shape_.block<2, 1>(0, 0)的意思是在(0,0)位置提取一个2*1的块
+     * 矩阵的话用block可以，向量的话建议用segment
+     */
     vehicle_shape_.block<2, 1>(0, 0) = Vec2d(-rear_axle_dist, width / 2);
     vehicle_shape_.block<2, 1>(2, 0) = Vec2d(length - rear_axle_dist, width / 2);
     vehicle_shape_.block<2, 1>(4, 0) = Vec2d(length - rear_axle_dist, -width / 2);
@@ -453,7 +458,9 @@ double HybridAStar::ComputeH(const StateNode::Ptr& current_node_ptr, const State
 double HybridAStar::ComputeG(const StateNode::Ptr& current_node_ptr, const StateNode::Ptr& neighbor_node_ptr) const {
     double g;
     if (neighbor_node_ptr->direction_ == StateNode::FORWARD) {
+        // 如果下一个节点的转向档位不等于当前的转向档位的话，就意味着有转向动作
         if (neighbor_node_ptr->steering_grade_ != current_node_ptr->steering_grade_) {
+            // 如果下一个节点准备走直线的话，那就只惩罚转向改变因子就可以了，否则的话就再多惩罚一个转向因子
             if (neighbor_node_ptr->steering_grade_ == 0) {
                 g = segment_length_ * steering_change_penalty_;
             } else {
@@ -555,14 +562,17 @@ bool HybridAStar::Search(const Vec3d& start_state, const Vec3d& goal_state) {
         GetNeighborNodes(current_node_ptr, neighbor_nodes_ptr);
         neighbor_time = neighbor_time + timer_get_neighbor.End();
 
+        // A*的代价(F)组成是：起点到当前（G）+ 当前到目标（H）: F = G + H
         for (unsigned int i = 0; i < neighbor_nodes_ptr.size(); ++i) {
             neighbor_node_ptr = neighbor_nodes_ptr[i];
 
             Timer timer_compute_g;
+            // 步进代价
             const double neighbor_edge_cost = ComputeG(current_node_ptr, neighbor_node_ptr);
             compute_g_time = compute_g_time + timer_get_neighbor.End();
 
             Timer timer_compute_h;
+            // 这里是bug，应该算邻居节点到目标的代价
             const double current_h = ComputeH(current_node_ptr, goal_node_ptr) * tie_breaker_;
             compute_h_time = compute_h_time + timer_compute_h.End();
 

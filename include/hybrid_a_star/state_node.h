@@ -54,11 +54,11 @@ struct StateNode {
     NODE_STATUS node_status_;
     DIRECTION direction_{};
 
-    Vec3d state_;
+    Vec3d state_;  // 位置和角度构成的3维向量
     Vec3i grid_index_;
 
     double g_cost_{}, f_cost_{};
-    int steering_grade_{};  // 啥意思
+    int steering_grade_{};  // 转向的档位
 
     StateNode* parent_node_;
     typedef StateNode* Ptr;
